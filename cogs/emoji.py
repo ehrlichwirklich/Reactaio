@@ -1,11 +1,12 @@
 import discord
 from discord.ext import commands
-from discord.ext.commands import Bot, Context, Cog
+from discord.ext.commands import Bot, Cog, Context
+
 
 class Emoji(Cog):
 
-    def __init__(self, client: Bot):
-        self.client: Bot = client
+    def __init__(self, bot: Bot):
+        self.bot: Bot = bot
 
     @commands.has_permissions(manage_emojis = True)
     @commands.command(aliases = ['steal', 'addemote', 'add'])

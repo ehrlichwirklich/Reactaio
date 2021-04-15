@@ -4,6 +4,8 @@ import discord
 from discord import client
 from discord.ext import commands, tasks
 from discord.ext.commands import Context
+from discord.ext.commands.bot import Bot
+from discord.ext.commands.cog import Cog
 
 #text channels
 staff_room = 812369644152422440
@@ -44,7 +46,7 @@ vc_text = 812986121461825556
 text_channels = [staff_room, staff_activity, staff_issues, council_meeting, introductions, events, general, verified_lounge, vent, vent_no_response, ask_to_dm, rp, suggestions, female_only, bois, bot_request, complaints, confessions_reactions, selfies, selfies_reactions, media, media_reactions, writings, art_room, nsfw, horny_jail, nsfw_male, nsfw_female, verified_vc, gean_simps, nev_moonbeams, panther_inspiration, arshia_idea_dump, vc_text]
 
 
-text_levles = []
+text_levels = []
 voice_levels = []
 
 #voice channels
@@ -77,12 +79,12 @@ level_up = 812549913820790784
 
 voice_channels = [council_meeting_voice, join_to_create, lounge_voice, verified_voice, public_i, public_ii, public_iii, private_i, private_ii, private_iii, music_i, music_ii, music_iii, stream_1, stream_2, among_us, cah, scribblo, jack_box, movie_night, karakoe, show, voice_1v1, waiting]
 
-class Levels(commands.Cog):
+class Levels(Cog):
 
-    client: commands.Bot
+    bot: Bot
 
-    def __init__(self, client):
-        self.client = client
+    def __init__(self, bot: Bot):
+        self.bot = bot
 
     @commands.Cog.listener()
     async def on_ready(self):
@@ -98,7 +100,7 @@ class Levels(commands.Cog):
                 xp = line.split(',')[1]
                 self.voice_levles.append([id, xp])
 
-    @commands.Cog.listener()
+    @Cog.listener()
     async def on_message(self, message: discord.Message):
         if message.guild.id not in text_channels:
             return
@@ -140,7 +142,7 @@ class Levels(commands.Cog):
         with open('xps/xps.data', mode='a') as f:
             f.write(f'{self.member.id},10,0')
 
-    @commands.Cog.listener()
+    @Cog.listener()
     async def on_voice_state_update(self, before, after):
         if before.voice is None and after.voice is None:
             self.countdown.start()
@@ -161,17 +163,17 @@ class Levels(commands.Cog):
     async def top(self, ctx: Context):
         text_levels = sorted(self.text_levels, key = operator.itemgetter(1), reverse = True)
         voice_levels = sorted(voice_levels, key = operator.itemgetter(1), reverse = True)
-        embed = discord.Embed(title = 'Text Leaderboard', color = 0x00ffaa, timestamp = True)
+        embed = discord.Embed(title = 'Text Leaderboard', color = 0x00ffaa)
         id = 1
         for level in text_levels:
             uid, xp = level.split(',')
             embed.add_field(name = f'#{id}:)', value = f'{ctx.guild.fetch_member()}, {xp} xp, level: {xp / 100}')
             id += 1
-        embd = discord.Embed(title = 'Voice leaderboard: ', color = 0x00ffaa, timestamp = True)
+        embd = discord.Embed(title = 'Voice leaderboard: ', color = 0x00ffaa)
         id = 1
         for voice in voice_levels:
             uid, xp = voice.split(',')
             embd.add_field(name = f'#{id}:)', value = f'{ctx.author}, {xp} xp, level: {xp / 100}')
 
-def setup(client: commands.Bot):
-    client.add_cog(Levels(client))
+def setup(bot: Bot):
+    bot.add_cog(Levels(bot))

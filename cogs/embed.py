@@ -10,10 +10,10 @@ embeds = []
 
 class Embed(commands.Cog):
 
-    client: commands.Bot
+    bot: commands.Bot
 
-    def __init__(self, client: commands.Bot):
-        self.client = client
+    def __init__(self, bot: commands.Bot):
+        self.bot = bot
         for fileName in os.listdir('embeds'):
             if fileName.endswith('.json') and os.path.isfile(fileName):
                 with open(fileName, mode = 'r') as f:
@@ -107,8 +107,8 @@ class Embed(commands.Cog):
             self.name = args[1]
             for embed in embeds:
                 if embed[0] == self.name:
-                    self.client.get_channel(self.channel.id).message.send(embed[1])
+                    self.bot.get_channel(self.channel.id).message.send(embed[1])
                     return
             
-def setup(client):
-    client.add_cog(Embed(client))
+def setup(bot):
+    bot.add_cog(Embed(bot))

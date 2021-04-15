@@ -1,9 +1,13 @@
 import os
 import random
+from asyncio.events import get_event_loop
 
 import discord
+from asyncpg.pool import Pool, create_pool
 from discord.ext import commands
-from discord.flags import Intents
+from discord.ext.commands.bot import Bot
+from discord.ext.commands.context import Context
+from discord.utils import get
 
 TOKEN = os.getenv('DISCORD_TOKEN')
 
@@ -15,7 +19,15 @@ intent.bans = True
 intent.dm_messages = True
 intent.guilds = True
 intent.reactions = True
-client = commands.Bot(command_prefix = bot_prefix, intents = intent)
+bot: Bot = Bot(command_prefix = bot_prefix, intents = intent)
+
+bot.POSTGRES_INFO = {
+    'user': 'postgres',
+    'password': 'root',
+   'database': 'Reactaio',
+    'host':'localhost'
+}
+
 
 
 def ordinal(number: int):
@@ -27,28 +39,28 @@ def ordinal(number: int):
         return 'rd'
     return 'th'
 
-@client.event
+@bot.event
 async def on_ready():
-    await client.change_presence(status = discord.Status.online, activity = discord.Game(f'{bot_prefix}help.'))
-    print(f' {client.user} has connected.')
+    await bot.change_presence(status = discord.Status.online, activity = discord.Game(f'{bot_prefix}help.'))
+    print(f' {bot.user} has connected.')
 
 
-@client.event
+@bot.event
 async def on_member_join(member):
     print(f'Welcome, {member}')
 
-@client.event
+@bot.event
 async def on_member_remove(member):
     print(f'Goodbye, {member}')
 
-
-@client.command()
+@bot.command()
 @commands.has_permissions(mention_everyone = True)
-async def revive(ctx):
-    await ctx.send(f'{ctx.author} has used revive command!')
-    await ctx.send('@Chat revive')
+async def revive(ctx: commands.Context):
+    await ctx.send(f'**{ctx.author}** has used revive command!')
+    revive: discord.Role = get(ctx.guild.roles, id = 813018522082607125)
+    await ctx.send(f'{revive.mention} Get active!')
 
-@client.command(aliases = ['8ball'])
+@bot.command(aliases = ['8ball'])
 async def _8ball(ctx, *, question):
     responses = ['As I see it, yes.',
     'Ask again later.',
@@ -73,19 +85,22 @@ async def _8ball(ctx, *, question):
     ]
     await ctx.send(f'Question: {question}\n Answer: {random.choice(responses)}')
 
-@client.command()
+@bot.command()
 @commands.has_permissions(administrator = True)
 async def load(ctx, extension):
-    client.load_extension(f'cogs.{extension}')
+    bot.load_extension(f'cogs.{extension}')
 
-@client.command()
+
+@bot.command()
 @commands.has_permissions(administrator = True)
-async def unload(ctx, extension):
-    client.unload_extension(f'cogs.{extension}')
-
+async def unload(ctx: Context, extension):
+    bot.unload_extension(f'cogs.{extension}')
 
 for fileName in os.listdir('./cogs'):
-    if fileName.endswith('.py'):
-        client.load_extension(f'cogs.{fileName[:-3]}')
-    
-client.run(TOKEN)
+    if fileName.endswith('.py'):        
+        bot.load_extension(f'cogs.{fileName[:-3]}')
+
+loop = get_event_loop()
+bot.pool = loop.run_until_complete(create_pool(**bot.POSTGRES_INFO))
+
+bot.run(TOKEN)

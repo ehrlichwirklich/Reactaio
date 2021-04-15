@@ -1,206 +1,253 @@
-import asyncio
+
 import datetime
-import os
-from operator import index
-from sys import prefix
+from asyncio import tasks
+import asyncpg
 
 import discord
-from discord import reaction
-from discord.colour import Color
+from asyncpg.connection import Connection
+from discord.channel import TextChannel
+from discord.embeds import Embed
+from discord.errors import Forbidden
 from discord.ext import commands, tasks
+from discord.ext.commands.bot import Bot
+from discord.ext.commands.cog import Cog
+from discord.ext.commands.context import Context
+from discord.member import Member
+from discord.utils import get
 
 
-class Moderation(commands.Cog):
+class Moderation(Cog):
 
-    client: commands.Bot
+    bot: commands.Bot
 
-    def __init__(self, client: commands.Bot):
-        self.client = client
-        fname: str
-        for fname in os.listdir('warns'):
-            if os.path.isfile(fname) and fname.endswith('.data'):
-                with open(fname, mode = 'r') as f:
-                    line: str
-                    for line in f:
-                        member, reason = line.split(': ')
-                        self.warns.append(self.Warn(member, reason))
-                    
+    connection: Connection
 
-    class Warn:
-        member: discord.Member
-        __count__: int = 0
-        reasons = []
-        time = []
-
-        def __init__(self, member: discord.Member, reason: str):
-            self.member = member
-            self.__count__ = 1
-            self.reasons.append(reason)
-            self.time.append(datetime.datetime.now())
+    def __init__(self, bot: Bot):
+        self.bot = bot
+        self.tempbancheck.start()
+        self.tempmutecheck.start()
         
-        def addwarn(self, reason: str):
-            self.__count__ += 1
-            self.reasons.append(reason)
-            self.time.append(datetime.datetime.now())
         
-        def removewarn(self, id: int):
-            self.__count__ -= 1
-            del self.time[id]
-            del self.reasons[id]
+    @tasks.loop(seconds = 5.0)
+    async def tempbancheck(self):
+        async with self.bot.pool.acquire() as self.connection:
+            async with self.connection.transaction():
+                times = await self.connection.fetch('SELECT End FROM "Temp Bans"')               
+                for time in times:
+                    if datetime.datetime.strptime(date_string = time, format = '%m/%d/%Y, %H:%M:%S') <= datetime.datetime.utcnow():
+                        member: Member = await self.connection.fetchval('SELECT "User Id" FROM "Temp Bans" WHERE End = %1', (time, ))
+                        guild: discord.Guild = self.bot.get_guild(id = 812314425318440961)
+                        await guild.unban(user = member)
+                        await self.connection.execute('DELETE FROM "Temp Bans" WHERE End = %1', (time, ))
+
+    @tasks.loop(seconds = 5.0)
+    async def tempmutecheck(self):           
+        async with self.bot.pool.acquire() as self.connection:
+            async with self.connection.transaction():
+                times = await self.connection.fetch('SELECT End FROM "Temp Mutes"')        
+                for time in times:
+                    if datetime.datetime.strptime(format = '%m/%d/%Y, %H:%M:%S') <= datetime.datetime.utcnow():
+                        guild: discord.Guild = self.bot.get_guild(id = 812314425318440961)
+                        muted = get(guild.roles, name = 'Muted')
+                        member: Member = await self.connection.fetchval('SELECT "Member Id" FROM "Temp Mutes" WHERE End = %1', (time, ))
+                        await member.remove_roles(muted)
+                        await self.connection.execute('DELETE FROM "Temp Mutes" WHERE End = %1', (time, ))
+
     
-    warns = []
+        
                 
-
     @commands.command()
     @commands.has_permissions(kick_members = True)
-    async def kick(self, ctx: commands.Context, member: discord.Member , *, reason = 'No reason provided.'):
+    async def kick(self, ctx: commands.Context, member: discord.Member , *, reason = None):
         embed = discord.Embed(title = 'Kicked', colour = discord.Colour.from_rgb(0, 255, 127), thumbnail = ctx.guild.banner_url)
         embed.set_author(ctx.author)
-        embed.set_thumbnail()
+        embed.set_thumbnail(ctx.guild.icon)
         embed.description = f'**{member.name}#{member.discriminator} was kicked from {ctx.guild.name}.Reason: {reason}'
         await member.kick(reason = reason)
         await ctx.send(embed)
 
+       
+                    
     @commands.command()
     @commands.has_permissions(ban_members = True)
-    async def ban(self, ctx: commands.Context, member: discord.Member , duration = 0, *, reason = None):
-        if ctx is None:
+    async def ban(self, ctx: commands.Context, user: discord.User = None , duration = None, *, reason = None):
+        if user is None:
             embed: discord.Embed = discord.Embed(title = 'Ban', color = 0x00ffaa, thumbnail = ctx.guild.banner_url)
-            embed.description = f'{self.client.get_prefix()}ban [member] <duration> <reason>\n'
-            embed.add_field(name = 'Example', value = f'{self.client.get_prefix()}ban 1230231032 10m very cool')
+            embed.description = f'{self.bot.command_prefix}ban [user] <duration> <reason>\n'
+            embed.add_field(name = 'Example', value = f'{self.bot.command_prefix}ban 1230231032 10m very cool')
+            await ctx.send(embed = embed)
+            return
         embed = discord.Embed(title = 'Banned', color = 0x00ffaa, thumbnail = ctx.guild.banner_url)
-        embed.set_author(name = member.display_name)
-        if(duration == 0):
+        try:
+            print(int(duration[:-1]))
+        except:
+            reason = f'{duration} {reason}'
+            duration = 0
+        if duration is None:
+            duration = 0
+        if duration == 0:
             val = ''
-        else:
+        else:    
             if duration.endswith('y'):
-                seconds = duration[:-1] * 365 * 24 * 60 * 60
+                hours = int(duration[:-1]) * 365 * 24
                 val = f' for {duration[:-1]} years.'
             elif duration.endswith('m'):
-                seconds = duration[:-1] * 30 * 24 * 60 * 60
+                hours = int(duration[:-1]) * 30 * 24
                 val = f' for {duration[:-1]} months.'
             elif duration.endswith('d'):
-                seconds = duration[:-1] * 24 * 60 * 60
+                hours = int(duration[:-1]) * 24
                 val = f' for {duration[:-1]} days.'
             elif duration.endswith('h'):
-               seconds = duration[:-1]  * 60 * 60
-               val = f' for {duration[:-1]} hours.'
-        embed.description = f'**{member.name}#{member.discriminator} was banned from {ctx.guild.name}{val}.Reason: {reason}'
-        await member.ban(reason = reason, delete_message_days = 0)
-        await member.send(discord.Embed(title = 'Banned', author = ctx.message.author, description = f'You were banned from {ctx.message.guild}{val}. Reason: {reason}. Moderator: {ctx.author}'))
+                hours = int(duration[:-1]) 
+                val = f' for {duration[:-1]} hours.'
+        embed.description = f'**{user.display_name}** was banned from {ctx.guild.name}{val}. Reason: {reason}'
+        await ctx.guild.ban(user = user, delete_message_days = 0, reason = reason)
         await ctx.send(embed = embed)
-        if('seconds' in locals):
-            await asyncio.sleep(delay = seconds)
-            await member.unban(ctx.message.server)
+        try:
+            await user.send(discord.Embed(title = 'Banned', description = f'You were banned from {ctx.message.guild}{val}. Reason: {reason}. Moderator: {ctx.author}'))
+        except Forbidden:
+            pass
+        if hours:
+            now: datetime.datetime = datetime.datetime.utcnow()
+            delta: datetime.timedelta = datetime.timedelta(hours = int(hours))
+            end = now + delta
+            async with self.bot.pool.acquire() as self.connection:
+                async with self.connection.transaction():
+                    await self.connection.execute('INSERT INTO "Temp Bans" ("User Id", End, Reason) VALUES (%1, %2, %3)', (user.id, end.strftime(format = '%m/%d/%Y, %H:%M:%S'), reason))
 
     @commands.command(aliases = ['strike'])
     @commands.has_permissions(kick_members = True)
-    async def warn(self, ctx: commands.Context, member: discord.Member, reason: str):
-        for warn in self.warns:
-            if member == warn.member:
-                warn.addwarn(reason)
-                await member.send(f'You\'ve been warned in {ctx.guild}. Reason: {reason}. Moderator: {ctx.author}')
-                with open(f'warns/{member.id}.data', mode = 'w') as f:
-                    for reason in warn.reasons:
-                        f.write(f'{warn.reasons.index(reason)}: {reason}\n')
-                return
-        warn = self.Warn(member, reason)
-        await member.send(f'You\'ve been warned in {ctx.guild}. Reason: {reason}. Moderator: {ctx.author}')
-        with open(f'warns/{member.id}.data', mode = 'w') as f:
-            for reason in warn.reasons:
-                f.write(f'{warn.reasons.index(reason)}: {reason}\n')
-        
+    async def warn(self, ctx: commands.Context, member: discord.Member, *, reason: str):
+        warning: discord.Embed = discord.Embed(title = 'Warning', color = 0xff00000, description = f'You\'ve been warned in {ctx.guild}. Reason: {reason}. Moderator: {ctx.author}')
+        warning.set_footer(text = member.guild.name)
+        await member.send(embed = warning)
+        async with self.bot.pool.acquire() as self.connection:
+            async with self.connection.transaction():
+                await self.connection.execute('INSERT INTO Warnings VALUES ("Member Id", Warned At, Reason) VALUES (%1, %2, %3)', (member.id, datetime.datetime.utcnow().strftime(), reason))
+
     @commands.command(aliases = ['strikes', 'warns'])
     @commands.has_permissions(kick_members = True)
     async def warnings(self, ctx: commands.Context, member: discord.Member = None):
         if member is None:
             member = ctx.author
-        for warn in self.warnings:
-            if warn.member == member:
-                embed: discord.Embed = discord.Embed(title = f'{member.id}\'s wrnings: ', color = 0x00ffdd, timestamp = True)
-                embed.author = ctx.author
-                reason: str
-                for index in range(warn.reasons.len()):
-                    embed.add_field(name = f'Warn #{index}: ', value = f'Reason: {warn.reasons[index]} at {warn.time[index]}', inline = False)
-                await ctx.send(embed = embed)
-                return
-        await ctx.send(f'User **{member.display_name}** has no warnings.')
+            self.connection.execute('SELECT COUNT(Id) FROM Warnings')
+            count = self.cursor.fetchone()
+            if(count == 0):
+                await ctx.send(f'User **{member.display_name}** has no warnings.')
+            else:
+                async with self.bot.pool.acquire() as self.connection:
+                    async with self.connection.transaction():
+                        await self.connection.fetch('SELECT * FROM Warnings WHERE User == %1', (member, ))
+                warns = self.cursor.fetchall()
+                warnings: discord.Embed = discord.Embed(title = f'{member}\'s Warnings', color = 0x00ffaa, timestamp = datetime.datetime.utcnow())
+                warnings.set_footer(text = ctx.guild.name)
+                id: int = 1
+                for warn in warns:
+                    warnings.add_field(name = f'Warning #{id}: ', value = warn)
+                    id += 1   
+                await ctx.send(embed = warnings)     
 
 
     @commands.command(aliases = ['delwarn', 'delstrike', 'deletestrike', 'deletewarn'])
     @commands.has_permissions(kick_members = True)
-    async def deletewarning(self, ctx: commands.Context, member: discord.Member, id: int):
-        for warn in self.warnings:
-            if warn.member == member:
-                warn.removewarn(id)
-                await ctx.send(f'Warning #{id} from user {member.display_name} has been removed successfully.')
-                return
-        await ctx.send('warning not found, please try again with a different id or member.')
-
-
+    async def deletewarning(self, ctx: commands.Context, id: int):
+        try:
+            async with self.bot.pool.acquire() as self.connection:
+                async with self.connection.transaction():
+                    await self.connection.execute('DELETE FROM warns WHERE Id = %1', (id, ))
+            await ctx.send("Warning successfully removed.")
+        except:
+            await ctx.send('Warning not found, please try again with another id.')
+    
+    @commands.command()
+    @commands.has_permissions(manage_channels = True)
+    async def lock(self, ctx: Context, channel: TextChannel = None):
+        if channel is None:
+            channel = ctx.channel
+        await channel.set_permissions(channel.guild.default_role, view_channel = True, send_message = False, embed_links = False, add_reactions = False)
+        embed: Embed = Embed(title = 'Locked', color = 0x00ffaa, )
 
     @commands.command(aliases = ['uban', 'rban', 'removeban'])
     @commands.has_permissions(ban_members = True)
-    async def unban(self, ctx, *, member):
-        bans =  await ctx.guild.bans()
-        name, descriminator = member.split('#')
-        for entry in bans:
-            user = entry.user
-            if(user.name, user.descriminator) == (name, descriminator):
-                await ctx.guild.unban(user)
-                await ctx.send(f'**{name}#{descriminator}** was unbanned.')
-                return
+    async def unban(self, ctx: Context, member: discord.Member, *, reason: str = None):
+        await ctx.guild.unban(discord.Object(id = member.id))
+        try:
+            async with self.bot.pool.acquire() as self.connection:
+                async with self.connection.transaction():
+                    await self.cursor.execute('DELETE FROM "Temp Bans" WHERE User = %1', (member.id, ))
+        except:
+            pass
+        await ctx.send(f'**{member.display_name}** was unbanned.')
 
     @commands.command()
-    @commands.has_permissions(mute_members = True)
-    async def mute(self, ctx, member, *, duration = 0, reason = None):
-        muted = discord.utils.get(member.server.roles, name='Muted', timestamp = True)
-        await ctx.add_roles(member, muted)
+    @commands.has_permissions(manage_messages = True)
+    async def mute(self, ctx: commands.Context, member: discord.Member,  duration, *, reason: str = None):
+        muted = discord.utils.get(member.guild.roles, name = 'Muted')
+        await member.add_roles(muted)
+        try:
+            print(int(duration[:-1]))
+        except:
+            reason = f'{duration} {reason}'
+            duration = 0
+        if duration is None:
+            duration = 0
         if duration == 0:
             val = ''
         elif duration.endswith('d'):
             val = f' for {duration[:-1]} days.'
-            seconds = duration[:-1] * 24 * 60 * 60
+            minutes = duration[:-1] * 24 * 60
         elif duration.endswith('h'):
             val = f' for {duration[:-1]} hours.'
-            seconds = duration[:-1] * 60 * 60
+            minutes = duration[:-1] * 60
         elif duration.endswith('m'):
             val = f' for {duration[:-1]} minutes.'
-            seconds = duration[:-1] * 60
+            minutes = duration[:-1]
         elif duration.endswith('y'):
-            seconds = duration[:-1] * 365 * 24 * 60 * 60
+            minutes = duration[:-1] * 365 * 24 * 60
             val = f' for {duration[:-1]} years.'    
-        description = f"**{member}** was muted by **{ctx.message.author}**{val}.Reason: {reason}"
-        await member.send(discord.Embed(title = 'Banned', author = ctx.message.author, description = f'You were muted in {ctx.message.guild}{val}. Reason: {reason}'))
+        description = f"**{member}** was muted by **{ctx.message.author}**{val}. Reason: {reason}"
+        await member.send( embed = discord.Embed(title = 'Muted', author = ctx.message.author, description = f'You were muted in {ctx.message.guild}{val}. Reason: {reason}'))
         embed = discord.Embed(title = "Muted", description = description, color = 0x00ffaa)
         await ctx.send(embed = embed)
-        if 'seconds' in locals:
-            asyncio.sleep(delay = seconds)
-            await ctx.remove_roles(member, muted)
+        if minutes:
+            print('Seems like the duration exists uwu\n')
+            now: datetime.datetime = datetime.datetime.utcnow()
+            delta: datetime.timedelta = datetime.timedelta(minutes = int(minutes))
+            end = now + delta
+            async with self.bot.pool.acquire() as self.connection:
+                async with self.connection.transaction():
+                    await self.connection.execute('INSERT INTO "Temp Mutes" ("Member Id", End, Reason) VALUES(%1, %2, %3)', (member.id, end.strftime('%m/%d/%Y, %H:%M:%S'), reason))
     
     @commands.command()
-    @commands.has_permissions(mute_members = True)
-    async def unmute(self, ctx, member, reason = 'No reason provided.'):
-        role = discord.utils.get(member.server.roles, name = 'Muted', timestamp = True)
-        await ctx.remove_roles(member, role)
-        description = f"**{member}** was umuted by **{ctx.message.author}**.Reason: {reason}"
+    @commands.has_permissions(manage_messages = True)
+    async def unmute(self, ctx, member: discord.Member, *, reason = None):
+        role = discord.utils.get(member.guild.roles, name = 'Muted')
+        await member.remove_roles(role)
+        description = f"**{member}** was umuted by **{ctx.message.author}**. Reason: {reason}"
         embed = discord.Embed(title = "Unmuted", description = description, color = 0x00ffaa)
-        await member.send(discord.Embed(title = 'Unmuted', author = ctx.message.author, description = f'You were unmuted in {ctx.message.guild}. Reason: {reason}'))
-        await ctx.send(embed = embed)    
+        await member.send(embed = discord.Embed(title = 'Unmuted', author = ctx.message.author, description = f'You were unmuted in {ctx.message.guild}. Reason: {reason}'))
+        await ctx.send(embed = embed)
+        try:
+            async with self.bot.pool.acquire() as self.connection:
+                async with self.connection.transaction():
+                    await self.connection.execute('DELETE FROM "Temp Mutes" WHERE "Member Id" = %1', (member.id, ))
+        except:
+            pass    
 
     @commands.command()
-    async def bans(self, ctx):
+    async def bans(self, ctx: commands.Context):
         bans = await ctx.guild.bans()
-        print('Banned users list:\n')
+        await ctx.send('Banned users list:\n')
+        string: str = ''
         for ban in bans:
-            print (f'{bans.user}\n')
+           string += f'{ban.user}\n'
+        await ctx.send(string)
 
     @commands.command(aliases = ['clear', 'clean'])
     @commands.has_permissions(manage_messages = True)
     async def purge(self, ctx, count = 10):
         await ctx.channel.purge(limit = count + 1)
 
-        
 
-def setup(client):
-    client.add_cog(Moderation(client))
+def setup(bot: Bot):
+    bot.add_cog(Moderation(bot))

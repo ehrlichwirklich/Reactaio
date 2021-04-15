@@ -6,7 +6,7 @@ from discord.ext import commands
 class Info(commands.Cog):
 
     afks = []
-    client: commands.Bot
+    bot: commands.Bot
 
 
     class AFK:
@@ -17,15 +17,15 @@ class Info(commands.Cog):
             self.member = member
             self.reason = reason
 
-    def __init__(self, client: commands.Bot):
-        self.client: commands.Bot = client
+    def __init__(self, bot: commands.Bot):
+        self.bot: commands.Bot = bot
         with open('afks/afks.data', mode = 'r') as f:
             for line in f:
                 self.afks.append(self.AFK(line.split(',|')[0], line.split(',|')[1]))
     
     @commands.command(aliases = ['test'])
     async def ping(self, ctx: commands.Context):
-        await ctx.send(f'Pong! {self.client.latency * 1000}ms')
+        await ctx.send(f'Pong! {self.bot.latency * 1000}ms')
 
     @commands.command()
     async def humans(self, ctx: commands.Context):
@@ -71,7 +71,7 @@ class Info(commands.Cog):
     async def afk(self, ctx: commands.Context, *, reason: str = None):
         nick = ctx.author.nick
         ctx.author.nick = '[AFK]' + ctx.author.nick
-        embed: discord.Embed = discord.Embed(title = 'AFK', color = 0x00ff00, timestamp = True)
+        embed: discord.Embed = discord.Embed(title = 'AFK', color = 0x00ff00)
         embed.author = ctx.author
         embed.description = f'Successfully set your AFK status, {ctx.author}! Reason: {reason}'
         embed.footer = f'This status will be gone on next message from {ctx.author}'

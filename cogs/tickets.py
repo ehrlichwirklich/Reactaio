@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ext.commands import Context
+from discord.ext.commands.bot import Bot
 from discord.utils import get
 
 
@@ -87,9 +88,9 @@ class Tickets(commands.Cog):
 
     @commands.has_permissions(administrator = True)
     @commands.command()
-    async def setup(self):
-        self.makeaticket: discord.TextChannel = self.client.get_channel(id = 812678081784315935)
-        self.verification: discord.TextChannel = self.client.get_channel(id = 812677465369214976)
+    async def setup(self, ctx: Context):
+        self.makeaticket: discord.TextChannel = self.bot.get_channel(id = 812678081784315935)
+        self.verification: discord.TextChannel = self.bot.get_channel(id = 812677465369214976)
 
         selfieverification: discord.Embed = discord.Embed(title = 'Selfie Verification', color = 0x00ff22, description = 'Please react to this message with the specified emoji to make a ticket.', footer = self.verification.guild).title
         videoverification: discord.Embed = discord.Embed(title = 'Video Verification', color = 0x00ff22, description = 'Please react to this message with the specified emoji to make a ticket.', footer = self.verification.guild).title
@@ -112,10 +113,11 @@ class Tickets(commands.Cog):
         self.apply.add_reaction('📧')
         self.appeal.add_reaction('📧')
 
-    def __init__(self, client: commands.Bot):
+    def __init__(self, bot: commands.Bot):
         
-        self.client:commands.Bot = client
-        
+        self.bot: commands.Bot = bot
+        self.makeaticket: discord.TextChannel = self.bot.get_channel(id = 812678081784315935)
+        self.verification: discord.TextChannel = self.bot.get_channel(id = 812677465369214976)
 
         with open('tickets/tickets.data', mode = 'r') as f:
             for line in f:
@@ -163,5 +165,5 @@ class Tickets(commands.Cog):
                 for ticket in self.tickets:
                     f.write(f'{ticket.category},|{ticket.user}')
 
-def setup(client):
-    client.add_cog(Tickets(client))
+def setup(bot: Bot):
+    bot.add_cog(Tickets(bot))

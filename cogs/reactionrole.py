@@ -1,15 +1,16 @@
+from enum import IntEnum
+
 import discord
 from discord.ext import commands
 from discord.ext.commands import Context
-import enum
+from discord.ext.commands.bot import Bot
 
-from enum import IntEnum
 
 class ReactionRoles(commands.Cog):
 
-    client: commands.Bot
+    bot: commands.Bot
 
-    reaction_roles = []
+    
 
     class ReactionRole():
 
@@ -25,22 +26,23 @@ class ReactionRoles(commands.Cog):
         unique: bool
         type: ReactionType
         emoji: discord.Emoji
-        role: discord.Role
-        role2: discord.Role
+        roles: list[discord.Role]
 
-        
-
-        def __init__(self, channel: discord.TextChannel, message: discord.Message, unique:bool, type: ReactionType, emoji: discord.Emoji, role: discord.Role, role2: discord.Role = None):
+        def __init__(self, channel: discord.TextChannel, message: discord.Message, unique:bool, type: ReactionType, emoji: discord.Emoji, role: discord.Role, *args):
             self.channel = channel
             self.message = message
             self.unique = unique
             self.type = type
             self.emoji = emoji
-            self.role = role
-            self.role2 = role2
+            self.roles.append(role)
+            for role in args:
+                self.roles.append(role)
 
-    def __init__(self, client):
-        self.client = client
+
+    reaction_roles: list[ReactionRole] = []
+
+    def __init__(self, bot: Bot):
+        self.bot = bot
         with open('rr data/reactroles.data', mode = 'r') as f:
             for line in f:
                 data = line.split(',|')
@@ -59,10 +61,10 @@ class ReactionRoles(commands.Cog):
                 channel = ctx.channel
             if message != None and type != None and emoji != None and role != None:
                 self.reaction_roles.append(self.ReactionRole(channel = channel, message = message, unique = unique, type = type, emoji = str(emoji), role = role, role2 = role2))
-                await self.client.add_reaction(channel.fetch_message(message.id), emoji = str(emoji))
+                await self.bot.add_reaction(channel.fetch_message(message.id), emoji = str(emoji))
                 ctx.send(embed = discord.Embed(title = 'Success!', description = f'Successfully ctreated reaction {str(emoji)} with the role(s): {role.mention}{role2.mention}.', color = 0x00ffaa, footer = {ctx.guild}))
-                with open('rr data/reactroles.data', mode = 'x') as f:
-                    f.write(f'{channel},|{message},|{unique},|{type},|{str(emoji)},|{role}{f",|{role2}" if role2 != None else ""}')
+                with open('rr data/reactroles.data', mode = 'w') as f:
+                    f.write(f'{channel},|{message},|{unique},|{type},|{str(emoji)},|{role}{f",|{role2}" if role2 is not None else ""}')
             elif message is None:
                 await ctx.send('Message id cannot be empty.')
             elif type is None:
@@ -79,15 +81,10 @@ class ReactionRoles(commands.Cog):
                     if reactions.message == message:
                         self.reaction_roles.remove(reactions)
                         with open('rr data/reactroles.data', mode = 'r') as f:
-                            data = []
-                            for line in f:
-                                if line.split(',|')[1] == message:
-                                    line = ''
-                                    break
-                                data.append(line)
-                        with open('rr data/reactroles.data', mode = 'w') as f:
-                            for d in data:
-                                f.write(f'{d}\n')
+                            reaction: self.ReactionRole
+                            for reaction in self.reaction_roles:
+                                f.write(f'{reaction.channel},|{reaction.message},|{reaction.unique},|{reaction.type},|{str(reaction.emoji)},|{reaction.role}{f",|{reaction.role2}" if reaction.role2 is not None else ""}')
+                            f.close()
             else:
                 ctx.send('Please specify the message id.')
 
@@ -127,5 +124,5 @@ class ReactionRoles(commands.Cog):
                     await payload.member.add_roles(reaction.role2)
                     await payload.member.remove_roles(reaction.role)
                 return
-def setup(client: commands.Bot):
-    client.add_cog(ReactionRoles(client))
+def setup(bot: commands.Bot):
+    bot.add_cog(ReactionRoles(bot))

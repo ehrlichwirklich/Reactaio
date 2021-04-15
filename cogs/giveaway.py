@@ -9,8 +9,8 @@ from discord.ext.commands import Bot, Cog, Context
 
 class Giveaway(Cog):
 
-    def __init__(self, client: Bot):
-        self.client: Bot = client
+    def __init__(self, bot: Bot):
+        self.bot: Bot = bot
 
     @commands.command(aliases = ['gstart'])
     @commands.has_role('Owner')
@@ -26,7 +26,7 @@ class Giveaway(Cog):
             seconds = int(time[:-1]) * 60
         elif time.endswith('s'):
             seconds = int(time[:-1])
-        embed: discord.Embed = discord.Embed(title = f'{prize} giveaway', color = 0x00ffdd, timestamp = True)
+        embed: discord.Embed = discord.Embed(title = f'{prize} giveaway', color = 0x00ffdd)
         embed.add_field(name = 'Starts in:',value = datetime.datetime.now(), inline = False)
         embed.add_field(name = 'Ends in:', value = datetime.datetime.now() + datetime.timedelta(seconds = seconds), inline = False)
         embed.footer = 'React with the 🎉 emoji to access the giveaway.'
@@ -39,12 +39,12 @@ class Giveaway(Cog):
         newmsg: discord.Member = await ctx.channel.fetch_message(message.id)
 
         users = newmsg.reactions[0].users().flatten()
-        users.pop(users.index(self.client.user))
+        users.pop(users.index(self.bot.user))
         users.pop(ctx.author)
 
         winner: discord.Member = random.choice(users)
 
-        win: discord.Embed = discord.Embed(title = 'Winner', color = 0xff0000, timestamp = True)
+        win: discord.Embed = discord.Embed(title = 'Winner', color = 0xff0000)
         win.footer = 'Best of wishes to them. DM Arshia Aghaei#0617 to claim their prize!'
         win.description = f'Congratulations, {winner.mention}! You have won {prize}!'
         win.author = 'Giveaway bot'
@@ -52,5 +52,5 @@ class Giveaway(Cog):
         await ctx.send(embed = win)
 
 
-def setup(client: Bot):
-    client.add_cog(Giveaway(client))
+def setup(bot: Bot):
+    bot.add_cog(Giveaway(bot))

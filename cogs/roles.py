@@ -1,11 +1,13 @@
 import discord
-
 from discord.ext import commands
+from discord.ext.commands.bot import Bot
+from discord.ext.commands.cog import Cog
 
-class Roles(commands.Cog):
+
+class Roles(Cog):
     
-    def __init__(self, client: commands.Bot) -> None:
-        self.client: commands.Bot = client
+    def __init__(self, bot: commands.Bot) -> None:
+        self.bot: Bot = bot
     
     @commands.command()
     async def role(self, ctx: commands.Context, val, key: str, *args):
@@ -36,8 +38,8 @@ class Roles(commands.Cog):
         embed.description = description
     
 
-def setup(client: commands.Bot):
-    client.add_cog(Roles(client))
+def setup(bot: Bot):
+    bot.add_cog(Roles(bot))
 
         
     
